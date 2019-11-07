@@ -20,7 +20,7 @@ library(memisc)
 
 ```{r, Load_the_Data}
 # 加载数据
-setwd('/Volumes/Transcend/dataMining/NanoDegreeDataMining/EDA探索性数据分析/EDA最后作业-进阶项目2-研究和总结数据/ppdai_3_23')
+#setwd('/Volumes/Transcend/dataMining/NanoDegreeDataMining/EDA探索性数据分析/EDA最后作业-进阶项目2-研究和总结数据/ppdai_3_23')
 
 lp <- read.csv('LP.csv')
 lc <- read.csv('LC.csv')
@@ -110,32 +110,18 @@ write.csv(lc.all, "lc.all.csv", row.names=FALSE)
 # 单变量绘图选择 
 
 #### 年龄直方图
-
+查看借款人员年龄的分布
 ```{r , Univariate_Plots}
 ggplot(aes(x = 年龄 ), data = lc.all) +
   geom_histogram(fill='#099DD9', binwidth = 2) +
-  labs(title = 'Age Histogram', x = '年龄', y = '借贷数量') +
+  labs(title = 'Age Histogram', x = '年龄') +
   theme(text = element_text(family = 'Kai'))
 
 ```
 
-## ggpairs分析变量关系
+* 图形信息：
+  - 借款人员年龄主要集中在20~30岁
 
-`set.seed(20191104)`
-
-`lc.all.samp <- lc.all[sample(1:length(lc.all$ListingId), 1000), ]`
-
-`lc.all.samp <- subset(lc.all.samp, select = c(-借款成功日期, -ListingId) )`
-
-`ggpairs(lc.all.samp, 
-  lower = list(continuous = wrap("points", shape = I('.'))), 
-  upper = list(combo = wrap("box", outlier.shape = I('.')))) + 
-  theme(text = element_text(family = 'Kai')) `
-
-
-
-# 单变量分析
-* 借款年龄集中在 25~30岁
 
 ### 你的数据集结构是什么？
 * 年龄：17 ~ 56 岁
@@ -166,13 +152,6 @@ ggplot(aes(x = 年龄 ), data = lc.all) +
 * lc表中每个借款标的所有还款期还款状态统计：count_还款状态_2、count_还款状态_1_3
 
 ### 在已经探究的特性中，是否存在任何异常分布？你是否对数据进行一些操作，如清洁、调整或改变数据的形式？如果是，你为什么会这样做？
-
-`qplot(x = 年龄 , y = 历史正常还款期数, data = lc.all) + geom_point()`
-
-`qplot(x = 年龄 , y = 历史成功借款金额, data = lc.all) + geom_point()`
-
-`qplot(x = 年龄 , y = 历史成功借款次数, data = lc.all) + geom_point()`
-
   
 * 异常值：
   - 历史正常还款期数 的最大值
@@ -196,6 +175,11 @@ ggplot(aes(x = 年龄, y = 借款金额), data = lc.all) +
  
   
 ```
+* 图形信息：
+  - 20~25岁的借款人员，借款金额增加明显
+  - 25岁以后，借款金额上升缓慢，相对稳定
+
+
 
 #### 性别统计
 ```{r , Bivariate_Plots_Age-VS-Sex}
@@ -208,6 +192,10 @@ ggplot(lc.all, aes(x = 性别, colour = 性别)) +
   
 ```
 
+* 图形信息：
+  - 借款人员中男性比例较大
+
+
 #### 是否首标 VS 初始评级
 ```{r, Age-VS-firstLoan-PingJi}
 ggplot(aes(x = 是否首标, fill=初始评级), data = lc.all) + 
@@ -216,6 +204,11 @@ ggplot(aes(x = 是否首标, fill=初始评级), data = lc.all) +
   theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 25))
 
 ```
+
+* 图形信息：
+  - 首标的比例大概1/3左右，首标初始评级集中大多是D级别
+  - 非首标 金额大的初始评级大多是C级。A级、B级比例较少
+
 
 #### 年龄 VS 还款状态
 ```{r, Age-VS-RepayType}
@@ -226,6 +219,10 @@ ggplot(lc.all, aes(x = 性别, fill=repayment_status)) +
   
 ```
 
+* 图形信息：
+  - 男、女未还款的比例占比都较大
+
+
 
 #### 年龄 vs 借款类型
 ```{r, Bivariate_Plots_Age-VS-Money-color-loanType}
@@ -234,6 +231,10 @@ ggplot(aes(x = 年龄,fill=借款类型), data = lc.all) +
   labs(title='年龄 vs 借款类型', x = '年龄', y = '借款类型') +
   theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 25))
 ```
+
+* 图形信息：
+  - 各个年轻层，大部分借款类型为：普通、其他
+
 
 #### 年龄 vs repayment_status
 
@@ -244,6 +245,10 @@ ggplot(aes(x = 年龄,fill=repayment_status), data = lc.all) +
   theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 25))
 ```
 
+* 图形信息：
+  - 各个年龄层，未还款比例占比图
+
+
 #### 年龄 VS 历史逾期还款期数
 ```{r, age_VS_历史逾期还款期数}
 ggplot(aes(x = 年龄, y = 历史逾期还款期数), data = lc.all) +
@@ -251,6 +256,10 @@ ggplot(aes(x = 年龄, y = 历史逾期还款期数), data = lc.all) +
   labs(title='年龄 VS 历史逾期还款期数', x = '年龄') +
   theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = .5))
 ```
+
+* 图形信息：
+  - 各个年龄层历史 逾期期数展示图，26岁历史逾期达到顶峰
+
 
 
 # 双变量分析
@@ -289,12 +298,13 @@ ggplot(aes(x = 年龄, y = 借款金额, fill=借款类型), data = lc.all) +
 
 ```
 
+* 图形信息：
+  - 各个年龄层借款金额及类型对比，普通、其他占比最大
+
+
+
 #### 年龄vs借款金额&初始评级
 ```{r, Age-VS-Money-color-PingJi}
-ggplot(aes(x = 年龄, y = 借款金额, fill=初始评级), data = lc.all) + 
-  geom_histogram(stat = 'summary', fun.y = log10) +
-  labs(title='年龄 vs 借款金额&初始评级', x = '年龄') +
-  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
 
 ggplot(aes(x = repayment_status, y = 借款金额, color = 初始评级), data = lc.all) + 
   geom_point() + 
@@ -307,6 +317,11 @@ ggplot(aes(x = repayment_status, y = 借款金额, color = 初始评级), data =
 
 ```
 
+* 图形信息（0：未还款。1：已还款）：
+  - 未还款的借款标的初始评级较高
+  - 已还款的借款标 B级评级还款金额最多
+
+
 ```{r, Multivariate_Plots_总待还本金与年龄VS还款状态}
 ggplot(aes(x = 年龄, y = 总待还本金, color = repayment_status), data = lc.all) + 
   geom_point() + 
@@ -317,6 +332,10 @@ ggplot(aes(x = 年龄, y = 总待还本金, color = repayment_status), data = lc
   ggtitle('总待还本金与年龄VS还款状态') +
   theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
 ```
+
+* 图形说明：
+  - 各个年龄层未还款金额大多在10000万元以下
+
 
 #### 还款状态 与 总待还本金 VS 初始评级
 ```{r, Multivariate_Plots_还款状态与总待还本金VS初始评级}
@@ -332,6 +351,11 @@ ggplot(aes(x = repayment_status, y = sqrt(总待还本金), color = 初始评级
 
 ```
 
+* 图形说明（0：未还款。1：已还款）：
+  - 已还款借款标，初始评级也越高
+  - 为还款借款标，初始评级多是C、D
+
+
 #### 认证与否 与 总待还金额 VS 还款状态
 ```{r, Multivariate_Plots_认证与否与总待还金额VS还款状态}
 
@@ -345,6 +369,9 @@ ggplot(aes(x = repayment_status, y = sqrt(总待还本金), color = certificatio
   theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 10))
 
 ```
+
+* 图形说明：
+  - 未还款的借款标，大多是没有任何认证的
 
 
 ```{r, Multivariate_Plots_认证}
@@ -361,6 +388,10 @@ ggplot(aes(x = certification, y = sqrt(总待还本金), color = 初始评级), 
 
 ```
 
+* 图形说明：
+  - 有视频认证的借款人，总待还本金较少，说明视频认证有监督还款作用
+
+
 #### 认证 与 历史正常还款期数 VS 初始评级
 ```{r, Multivariate_Plots_认证与历史正常还款期数VS初始评级}
 
@@ -374,6 +405,10 @@ ggplot(aes(x = certification, y = 历史正常还款期数, color = 初始评级
 
 
 ```
+
+* 图形说明：
+  - 手机认证 与否 对初始评级没有影响
+
 
 #### 还款与否 预测模型
 
@@ -437,9 +472,9 @@ ggplot(aes(x = 年龄, y = 借款金额), data = lc.all) +
 
 ```
 
-### 描述一
-* 20~25岁 随年龄增加借款金额增加 ，可能因为上学、踏入社会 消费增加导致
-* 25~56岁 借款金额增长比较稳定 ，可能参加工作、有风险、信用意识
+* 绘图一说明：
+  - 20~25岁 随年龄增加借款金额增加 ，可能因为上学、踏入社会 消费增加导致
+  - 25~56岁 借款金额增长比较稳定 ，可能参加工作、有风险、信用意识
 
 ### 绘图二
 ```{r, Plot_Two}
@@ -450,9 +485,9 @@ ggplot(aes(x = 年龄,fill=借款类型), data = lc.all) +
 
 ```
 
-### 描述二
-* 20~30岁 借款人员比重最大，25、26岁借款人员数量出现峰值， 可能因为刚工作，消费增加
-* 借款类型大部分是：普通 和 其他
+* 绘图二说明：
+  - 20~30岁 借款人员比重最大，25、26岁借款人员数量出现峰值， 可能因为刚工作，消费增加
+  - 借款类型大部分是：普通 和 其他
 
 ### 绘图三
 ```{r, Plot_Three}
@@ -467,9 +502,9 @@ ggplot(aes(x = repayment_status, y = sqrt(总待还本金), color = 初始评级
   theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
 ```
 
-### 描述三
-* 未还款 的 初始评级 大多是D, D评级的借款还款风险较高
-* 已还款 的 初始评级 大多是C
+* 绘图三说明：
+  - 未还款 的 初始评级 大多是D, D评级的借款还款风险较高
+  - 已还款 的 初始评级 大多是C
 
 
 ### 绘图四
@@ -486,9 +521,9 @@ ggplot(aes(x = certification, y = sqrt(总待还本金), color = repayment_statu
 
 ```
 
-### 描述四
-* 经过视频认证的用户借款金额相对低，降低了总体风险 
-* 未认证的用户借款金额也偏高，增加了还款风险
+* 绘图四说明：
+  - 经过视频认证的用户借款金额相对低，降低了总体风险 
+  - 未认证的用户借款金额也偏高，增加了还款风险
 
 ### 绘图五 
 
@@ -501,12 +536,8 @@ ggplot(aes(x = 年龄, y = 借款金额, fill=初始评级), data = lc.all) +
 
 ```
 
-
-
-
-### 描述五
-
-* 借款金额越高 初始评级也越高 
+* 绘图五说明：
+  - 借款金额越高 初始评级也越高 
 
 ### 绘图六
 
@@ -523,9 +554,8 @@ ggplot(aes(x = repayment_status, y = 借款金额, color = 初始评级), data =
   theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
 ```
 
-### 描述六
-
-* 认证越高 ，借款越高 ，响应未还款的也越多
+* 绘图六说明
+  - 认证越高 ，借款越高 ，响应未还款的也越多
 
 
 ------
