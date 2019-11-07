@@ -1,0 +1,543 @@
+拍拍贷业务数据探索分析
+========================================================
+
+```{r, message=FALSE, warning=FALSE, packages}
+# 加载你最终使用的所有组件
+# 在这个代码块的分析中。
+# 注意，在这个代码块中，将参数 "echo" 设为假。
+# This prevents the code from displaying in the knitted HTML output.这可以避免代码混入 HTML 输出显示。
+# 应当在文件中，对所有代码块设为 echo=FALSE 。
+library(ggplot2)
+library(GGally)
+library(reshape2)
+library(dplyr)
+library(knitr)
+library(memisc)
+
+
+
+```
+
+```{r, Load_the_Data}
+# 加载数据
+setwd('/Volumes/Transcend/dataMining/NanoDegreeDataMining/EDA探索性数据分析/EDA最后作业-进阶项目2-研究和总结数据/ppdai_3_23')
+
+lp <- read.csv('LP.csv')
+lc <- read.csv('LC.csv')
+
+```
+
+# 数据汇总
+### 绘总还款流水 合并标的还款最终状态，以及 正常还款次数、逾期次数
+```{r merge_data}
+# head(subset(lp, 剩余本金 >0 | 剩余利息 >0 ), 20)
+
+# 统计借款标流水的 最后状态：最后的应还本金、逾期的次数、正常还款的次数
+lp.overdue_by_listingId <- lp %>%
+  group_by(ListingId) %>%
+  summarise(sum_剩余本金 = max(剩余本金),
+            count_还款状态_2 = sum(还款状态==2),
+            count_还款状态_1_3 = sum(还款状态 == 1 | 还款状态 == 3)) %>%
+  ungroup() %>%
+  arrange(ListingId)
+
+# 获取标的的最后一期的还款状态
+# 分为0-‘未还款’，1-‘已正常还款’，2-‘已逾期还款’，3-‘已提前还清该标全部欠款’，4-‘已部分还款’
+lp.last_period_status <- aggregate(lp[, c('还款状态')], list(lp$ListingId), tail, 1)
+names(lp.last_period_status) <- c('ListingId', 'repayment_status')
+
+# 获取最后一期的还款状态
+lp.overdue_by_listingId <- merge(lp.overdue_by_listingId, lp.last_period_status, by='ListingId', all.x=TRUE)
+
+# 合并lp.overdue_by_listingId 和 lc 
+lc.all <- merge(lc, lp.overdue_by_listingId, by = 'ListingId', all.x=TRUE)
+# 聚合：总待还本金、历史逾期还款期数
+lc.all <- transform(lc.all, 
+                    '总待还本金' = rowSums(lc.all[, c('总待还本金', 'sum_剩余本金')]),
+                    '历史逾期还款期数' = rowSums(lc.all[, c('历史逾期还款期数', 'count_还款状态_2')]),
+                    '历史正常还款期数' = rowSums(lc.all[, c('历史正常还款期数', 'count_还款状态_1_3')]),
+                    na.rm = T)
+
+
+
+# replace  {'未成功认证': 0, '成功认证': 1}
+#levels(lc.all$手机认证)[levels(lc.all$手机认证)=="未成功认证"] <- "0"
+#levels(lc.all$手机认证)[levels(lc.all$手机认证)=="成功认证"] <- "1"
+levels(lc.all$手机认证) <- factor(lc.all$手机认证, levels=c("未成功认证", "成功认证"), labels=c("0", "1"))
+levels(lc.all$户口认证) <- factor(lc.all$户口认证, levels=c("未成功认证", "成功认证"), labels=c("0", "1"))
+levels(lc.all$视频认证) <- factor(lc.all$视频认证, levels=c("未成功认证", "成功认证"), labels=c("0", "1"))
+levels(lc.all$学历认证) <- factor(lc.all$学历认证, levels=c("未成功认证", "成功认证"), labels=c("0", "1"))
+levels(lc.all$征信认证) <- factor(lc.all$征信认证, levels=c("未成功认证", "成功认证"), labels=c("0", "1"))
+levels(lc.all$淘宝认证) <- factor(lc.all$淘宝认证, levels=c("未成功认证", "成功认证"), labels=c("0", "1"))
+
+# 改变ListingId 为Factor类型
+lc.all$ListingId <- as.factor(lc.all$ListingId)
+
+# 数据集截取 同时 删除异常值 只取 
+# dim(filter(lc.all, (总待还本金 < 100000) &(历史正常还款期数 <= 100)))
+# dim(lc.all[(lc.all$总待还本金 <=100000) & (lc.all$历史正常还款期数 < 200), ])
+# lc.all <- subset(lc.all, 历史正常还款期数 < quantile(lc.all$历史正常还款期数, 0.999))
+# lc.all <- subset(lc.all, 历史成功借款金额 < quantile(lc.all$历史正常还款期数, 0.999))
+
+
+lc.all <- filter(lc.all, 
+                 (总待还本金 <= quantile(lc.all$借款金额, 0.95)) & (历史正常还款期数 <= quantile(lc.all$历史正常还款期数, 0.95)))
+
+
+# 合并 手机、视频、学历、征信、淘宝认证列为一列
+lc.all$certification<-ifelse(lc.all$手机认证 == "1","手机认证",
+                             ifelse(lc.all$视频认证 == "1","视频认证",
+                                    ifelse(lc.all$学历认证 == "1","学历认证",
+                                           ifelse(lc.all$征信认证 == "1","征信认证",
+                                                  ifelse(lc.all$淘宝认证 == "1","淘宝认证","未认证"
+                                                         )
+                                                  )
+                                           )
+                                    )
+                             )
+
+# 归并还款状态 分为0-‘未还款’，1-‘已正常还款’，2-‘已逾期还款’，3-‘已提前还清该标全部欠款’，4-‘已部分还款’
+# 1、3 合并为1 代表已还款。 0、2、4 合并为 0 代表为没完成还款
+lc.all$repayment_status <- ifelse(lc.all$repayment_status %in%  c("0", "2", "4"),"0","1")
+lc.all$repayment_status <- factor(lc.all$repayment_status)
+
+# 存储 lc.all
+lc.all<- subset(lc.all, select = -na.rm )
+write.csv(lc.all, "lc.all.csv", row.names=FALSE)
+
+```
+
+# 单变量绘图选择 
+
+#### 年龄直方图
+
+```{r , Univariate_Plots}
+ggplot(aes(x = 年龄 ), data = lc.all) +
+  geom_histogram(fill='#099DD9', binwidth = 2) +
+  labs(title = 'Age Histogram', x = '年龄', y = '借贷数量') +
+  theme(text = element_text(family = 'Kai'))
+
+```
+
+## ggpairs分析变量关系
+
+`set.seed(20191104)`
+
+`lc.all.samp <- lc.all[sample(1:length(lc.all$ListingId), 1000), ]`
+
+`lc.all.samp <- subset(lc.all.samp, select = c(-借款成功日期, -ListingId) )`
+
+`ggpairs(lc.all.samp, 
+  lower = list(continuous = wrap("points", shape = I('.'))), 
+  upper = list(combo = wrap("box", outlier.shape = I('.')))) + 
+  theme(text = element_text(family = 'Kai')) `
+
+
+
+# 单变量分析
+* 借款年龄集中在 25~30岁
+
+### 你的数据集结构是什么？
+* 年龄：17 ~ 56 岁
+* 借贷金额：100 ~ 500000 元
+* 借贷期限：1 ~ 24 期
+* 借款利率：6.5 ~ 24 %
+* 初始评级：A B C D E F 
+* 还款状态:0-未还款，1-已正常还款，2-已逾期还款，3-已提前还清该标全部欠款，4-已部分还款
+* 借款类型：电商 普通 其他 APP闪电
+
+### 你的数据集内感兴趣的主要特性有哪些？
+* 借款标 最终 的还款状态和那些特征有密切的关系
+* 借款人的年龄分布
+* 借款金额 和 年龄的关系
+* 年龄 和 借款类型 、初始评级的关系
+* 借款标的类型 和 最终还款状态 的关系
+* 初始评级 和 最终还款状态 的关系
+
+### 你认为数据集内哪些其他特征可以帮助你探索兴趣特点？
+* 初始评级
+* 年龄
+* 认证的特征
+
+### 根据数据集内已有变量，你是否创建了任何新变量？
+* 创建新特征如下：
+* 合并了手机、视频、学历、征信、淘宝认证 为一列 certification
+* lc表中每个借款标的最终还款状态列：repayment_status
+* lc表中每个借款标的所有还款期还款状态统计：count_还款状态_2、count_还款状态_1_3
+
+### 在已经探究的特性中，是否存在任何异常分布？你是否对数据进行一些操作，如清洁、调整或改变数据的形式？如果是，你为什么会这样做？
+
+`qplot(x = 年龄 , y = 历史正常还款期数, data = lc.all) + geom_point()`
+
+`qplot(x = 年龄 , y = 历史成功借款金额, data = lc.all) + geom_point()`
+
+`qplot(x = 年龄 , y = 历史成功借款次数, data = lc.all) + geom_point()`
+
+  
+* 异常值：
+  - 历史正常还款期数 的最大值
+  - 历史成功借款金额 的最大值
+  - 历史成功借款次数 的最大值
+* 数据值改变：
+  - "未成功认证" 变成 "0"
+  - "成功认证"   变成 "1"
+* 数据类型改变：
+  - ListingId int 变成 Factor类型
+
+
+# 双变量绘图选择
+#### 年龄 VS 借款金额
+```{r , Bivariate_Plots_Age_VS_LoanMoney}
+
+ggplot(aes(x = 年龄, y = 借款金额), data = lc.all) + 
+  geom_line(stat = 'summary', fun.y = median, color='#099DD9') +
+  labs(title='年龄 vs 借款金额', x = '年龄', y = '借款金额') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 25))
+ 
+  
+```
+
+#### 性别统计
+```{r , Bivariate_Plots_Age-VS-Sex}
+
+ggplot(lc.all, aes(x = 性别, colour = 性别)) + 
+  geom_histogram(aes(y = ..count..), stat = "count", fill='white') +
+  labs(title='性别统计', x = '性别', y = '数量') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 25))
+ 
+  
+```
+
+#### 是否首标 VS 初始评级
+```{r, Age-VS-firstLoan-PingJi}
+ggplot(aes(x = 是否首标, fill=初始评级), data = lc.all) + 
+  geom_histogram(aes(y = ..count..), stat = "count") +
+  labs(title='是否首标 VS 初始评级', x = '首标') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 25))
+
+```
+
+#### 年龄 VS 还款状态
+```{r, Age-VS-RepayType}
+ggplot(lc.all, aes(x = 性别, fill=repayment_status)) + 
+  geom_histogram(aes(y = ..count..), stat = "count") +
+  labs(title='性别 VS 还款统计', x = '性别') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 25))
+  
+```
+
+
+#### 年龄 vs 借款类型
+```{r, Bivariate_Plots_Age-VS-Money-color-loanType}
+ggplot(aes(x = 年龄,fill=借款类型), data = lc.all) + 
+  geom_histogram() +
+  labs(title='年龄 vs 借款类型', x = '年龄', y = '借款类型') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 25))
+```
+
+#### 年龄 vs repayment_status
+
+```{r, Bivariate_Plots_Age-color-repayType}
+ggplot(aes(x = 年龄,fill=repayment_status), data = lc.all) + 
+  geom_histogram(binwidth = 1) +
+  labs(title='年龄 vs 还款状态', x = '年龄', y = '还款状态') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 25))
+```
+
+#### 年龄 VS 历史逾期还款期数
+```{r, age_VS_历史逾期还款期数}
+ggplot(aes(x = 年龄, y = 历史逾期还款期数), data = lc.all) +
+  geom_histogram(aes(y = ..count..), stat = "count", fill='#F79420', binwidth = 1) +
+  labs(title='年龄 VS 历史逾期还款期数', x = '年龄') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = .5))
+```
+
+
+# 双变量分析
+
+### 探讨你在这部分探究中观察到的一些关系。这些感兴趣的特性与数据集内其他特性有什么区别？
+* 借款人员年龄集中在20~30岁
+* 20~30岁 随着年龄的增加，借款金额也增加；30~56岁 借款的金额稳定
+* 26、27岁逾期还款最多
+* 借款人员中：男性明显多女女性
+* 还款状态中：未还款占比较大，其次是正常还款，未出现部分还款情况
+* 借款类型中：普通 和 APP闪电 占比较大
+
+
+### 你是否观察到主要特性与其他特性之间的有趣关系？
+* 总待还本金  越大  不还款的概率越大
+* 历史正常还款期数越多 正常还款的概率越大
+
+`with(lc.all, cor.test( as.numeric(总待还本金), as.numeric(repayment_status)), method = 'pearson')`
+
+`>with(lc.all, cor.test( as.numeric(历史正常还款期数), as.numeric(repayment_status)), method = 'pearson')`
+
+### 你发现最强的关系是什么？
+
+总待换本金 和 最终还款的关系 关系最强
+
+
+# 多变量绘图选择
+
+
+#### 年龄vs借款金额&借款类型
+```{r, Age-VS-Money-color-loanType}
+ggplot(aes(x = 年龄, y = 借款金额, fill=借款类型), data = lc.all) + 
+  geom_histogram(stat = 'summary', fun.y = log10) +
+  labs(title='年龄 vs 借款金额&借款类型', x = '年龄', y = '借款金额') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 25))
+
+```
+
+#### 年龄vs借款金额&初始评级
+```{r, Age-VS-Money-color-PingJi}
+ggplot(aes(x = 年龄, y = 借款金额, fill=初始评级), data = lc.all) + 
+  geom_histogram(stat = 'summary', fun.y = log10) +
+  labs(title='年龄 vs 借款金额&初始评级', x = '年龄') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
+
+ggplot(aes(x = repayment_status, y = 借款金额, color = 初始评级), data = lc.all) + 
+  geom_point() + 
+  scale_y_log10() +
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2))) +
+  ggtitle('借款金额和还款状态 VS 初始评级') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
+
+```
+
+```{r, Multivariate_Plots_总待还本金与年龄VS还款状态}
+ggplot(aes(x = 年龄, y = 总待还本金, color = repayment_status), data = lc.all) + 
+  geom_point() + 
+  scale_y_log10() +
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '最终还款状态', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2))) +
+  ggtitle('总待还本金与年龄VS还款状态') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
+```
+
+#### 还款状态 与 总待还本金 VS 初始评级
+```{r, Multivariate_Plots_还款状态与总待还本金VS初始评级}
+
+ggplot(aes(x = repayment_status, y = sqrt(总待还本金), color = 初始评级), data = lc.all) + 
+  geom_point() + 
+  scale_y_continuous(limits = c(0, 110), breaks = seq(0, 110, 10)) +
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2))) +
+  ggtitle('还款状态 与 总待还本金 VS 初始评级') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
+
+```
+
+#### 认证与否 与 总待还金额 VS 还款状态
+```{r, Multivariate_Plots_认证与否与总待还金额VS还款状态}
+
+ggplot(aes(x = repayment_status, y = sqrt(总待还本金), color = certification), data = lc.all) + 
+  geom_point(alpha = 1/100, position = 'jitter') + 
+  scale_y_continuous(limits = c(0, 110), breaks = seq(0, 110, 10)) +
+  scale_color_brewer(palette = 'Set1',
+                     guide = guide_legend(title = '还款状态', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2))) +
+  ggtitle('认证与否 与 总待还金额 VS 还款状态') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 10))
+
+```
+
+
+```{r, Multivariate_Plots_认证}
+
+ggplot(aes(x = certification, y = sqrt(总待还本金), color = 初始评级), data = lc.all) + 
+  geom_point(alpha=1/5, position = 'jitter') + 
+  scale_y_continuous(limits = c(0, 110), breaks = seq(0, 110, 10)) +
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2))) +
+  ggtitle('还款状态 与 总待还本金 VS 初始评级') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 10))
+
+
+```
+
+#### 认证 与 历史正常还款期数 VS 初始评级
+```{r, Multivariate_Plots_认证与历史正常还款期数VS初始评级}
+
+ggplot(aes(x = certification, y = 历史正常还款期数, color = 初始评级), data = lc.all) + 
+  geom_point(alpha=1/5, position = 'jitter') + 
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2))) +
+  ggtitle('认证 与 历史正常还款期数 VS 初始评级') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 10))
+
+
+```
+
+#### 还款与否 预测模型
+
+```{r repayModel}
+lc.all.model <- lc.all
+
+lc.all.model$certification[lc.all.model$certification == "手机认证"] <- "0"
+lc.all.model$certification[lc.all.model$certification == "视频认证"] <- "1"
+lc.all.model$certification[lc.all.model$certification == "未认证"] <- "2"
+
+lc.all.model$certification <- as.numeric(lc.all.model$certification)
+lc.all.model$repayment_status <- as.numeric(lc.all.model$repayment_status)
+
+
+m1 <- lm(I(repayment_status) ~ I(sum_剩余本金), data = lc.all.model)
+m2 <- update(m1, ~ . + 借款金额)
+m3 <- update(m2, ~ . + count_还款状态_1_3)
+m4 <- update(m3, ~ . + certification)
+m5 <- update(m4, ~ . + 借款期限)
+m6 <- update(m5, ~ . + 历史正常还款期数)
+m7 <- update(m6, ~ . + 历史成功借款次数)
+m8 <- update(m7, ~ . + 借款利率)
+
+mtable(m1, m2, m3, m4, m5, m6, m7, m8)
+
+```
+
+
+# 多变量分析
+
+###  探讨你在这部分探究中观察到的一些关系。通过观察感兴趣的特性，是否存在相互促进的特性？
+
+* 总待还本金 和 本期待还本金 对 最终是否还款有较大影响
+* 历史正常还款期数 对正常还款与否有促进作用
+* 未认证 和 手机认证 对 初始评级 无太大影响
+* 视频认证的用户借款金额较低
+
+
+### 这些特性之间是否存在有趣或惊人的联系呢？
+* 未认证的用户 初始评级 确较高 不正常，但历史正常还款的期数也较高
+* 未认证用户的未还款占比较高
+
+
+### 选项：你是否创建过数据集的任何模型？讨论你模型的优缺点。
+
+* 创建了模型
+* 缺点
+  - 没有借款记录的用户不适合模拟
+* 优点
+  - 有多次借款记录的用户适合模型
+------
+
+# 定稿图与总结
+
+### 绘图一
+```{r, Plot_One}
+ggplot(aes(x = 年龄, y = 借款金额), data = lc.all) + 
+  geom_line(stat = 'summary', fun.y = median, color='#099DD9') +
+  labs(title='年龄 vs 借款金额', x = '年龄', y = '借款金额') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
+
+```
+
+### 描述一
+* 20~25岁 随年龄增加借款金额增加 ，可能因为上学、踏入社会 消费增加导致
+* 25~56岁 借款金额增长比较稳定 ，可能参加工作、有风险、信用意识
+
+### 绘图二
+```{r, Plot_Two}
+ggplot(aes(x = 年龄,fill=借款类型), data = lc.all) + 
+  geom_histogram() +
+  labs(title='年龄 vs 借款类型', x = '年龄', y = '借款类型') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
+
+```
+
+### 描述二
+* 20~30岁 借款人员比重最大，25、26岁借款人员数量出现峰值， 可能因为刚工作，消费增加
+* 借款类型大部分是：普通 和 其他
+
+### 绘图三
+```{r, Plot_Three}
+ggplot(aes(x = repayment_status, y = sqrt(总待还本金), color = 初始评级), data = lc.all) + 
+  geom_point(alpha = 1/10, position =  position_jitter(h=0)) + 
+  # facet_wrap(~初始评级) +
+  # scale_y_continuous(limits = c(0, 200), breaks = seq(0, 200, 10)) +
+  scale_color_brewer(palette = 'Set1',
+                     guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2))) +
+  labs(title='还款状态 与 总待还本金 VS 初始评级', x = '还款类型（0：未还款。1：已还款）') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
+```
+
+### 描述三
+* 未还款 的 初始评级 大多是D, D评级的借款还款风险较高
+* 已还款 的 初始评级 大多是C
+
+
+### 绘图四
+```{r, Plot_four}
+ggplot(aes(x = certification, y = sqrt(总待还本金), color = repayment_status), data = lc.all) + 
+  geom_point(alpha=1/5, position = position_jitter(h=0)) + 
+  facet_wrap(~repayment_status) +
+  scale_y_continuous(limits = c(0, 110), breaks = seq(0, 110, 10)) +
+  scale_color_brewer(type = 'qual',
+                     guide = guide_legend(title = '还款状态', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2))) +
+  ggtitle('认证与否 与 总待还金额 VS 还款状态') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
+
+```
+
+### 描述四
+* 经过视频认证的用户借款金额相对低，降低了总体风险 
+* 未认证的用户借款金额也偏高，增加了还款风险
+
+### 绘图五 
+
+##### 年龄vs借款金额&初始评级
+```{r, Plot_five}
+ggplot(aes(x = 年龄, y = 借款金额, fill=初始评级), data = lc.all) + 
+  geom_histogram(stat = 'summary', fun.y = log10) +
+  labs(title='年龄 vs 借款金额&初始评级', x = '年龄') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
+
+```
+
+
+
+
+### 描述五
+
+* 借款金额越高 初始评级也越高 
+
+### 绘图六
+
+##### 年龄vs借款金额&初始评级
+
+```{r, Plot_six}
+ggplot(aes(x = repayment_status, y = 借款金额, color = 初始评级), data = lc.all) + 
+  geom_point() + 
+  scale_y_log10() +
+  scale_color_brewer(type = 'div',
+                     guide = guide_legend(title = '初始评级', reverse = F,
+                                          override.aes = list(alpha = 1, size = 2))) +
+  labs(title='借款金额和还款状态 VS 初始评级', x = '还款类型（0：未还款。1：已还款）') +
+  theme(text = element_text(family = 'Kai'), plot.title = element_text(hjust = 0.5, face = 'bold', size = 15))
+```
+
+### 描述六
+
+* 认证越高 ，借款越高 ，响应未还款的也越多
+
+
+------
+
+# 反思
+
+- 借款人员需要多认证， 视频认证 有利于 借款人还款
+- 未认证的用户借款金额偏高，增加了还款的风险
+- 有借款记录的人员，如果 总待还金额 较大，需要谨慎 放贷款
+- 有较好 "历史正常还款期数" 的用户 有利于正常 还贷
+- 初始评级A、B、C 更有利于还款
+- 未来EDA，应多总结影响最终结果的特征
+
+
+
