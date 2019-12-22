@@ -5,7 +5,7 @@
 # 
 # 在此项目中，你将构建你的第一个神经网络，并用该网络预测每日自行车租客人数。我们提供了一些代码，但是需要你来实现神经网络（大部分内容）。提交此项目后，欢迎进一步探索该数据和模型。
 
-# In[181]:
+# In[1]:
 
 
 get_ipython().run_line_magic('matplotlib', 'inline')
@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 # 
 # 构建神经网络的关键一步是正确地准备数据。不同尺度级别的变量使网络难以高效地掌握正确的权重。我们在下方已经提供了加载和准备数据的代码。你很快将进一步学习这些代码！
 
-# In[146]:
+# In[2]:
 
 
 data_path = 'Bike-Sharing-Dataset/hour.csv'
@@ -28,7 +28,7 @@ data_path = 'Bike-Sharing-Dataset/hour.csv'
 rides = pd.read_csv(data_path)
 
 
-# In[147]:
+# In[3]:
 
 
 rides.head()
@@ -40,7 +40,7 @@ rides.head()
 # 
 # 下图展示的是数据集中前 10 天左右的骑车人数（某些天不一定是 24 个条目，所以不是精确的 10 天）。你可以在这里看到每小时租金。这些数据很复杂！周末的骑行人数少些，工作日上下班期间是骑行高峰期。我们还可以从上方的数据中看到温度、湿度和风速信息，所有这些信息都会影响骑行人数。你需要用你的模型展示所有这些数据。
 
-# In[148]:
+# In[4]:
 
 
 rides[:24*10].plot(x='dteday', y='cnt')
@@ -50,7 +50,7 @@ rides[:24*10].plot(x='dteday', y='cnt')
 # 
 # 下面是一些分类变量，例如季节、天气、月份。要在我们的模型中包含这些数据，我们需要创建二进制虚拟变量。用 Pandas 库中的 `get_dummies()` 就可以轻松实现。
 
-# In[149]:
+# In[5]:
 
 
 dummy_fields = ['season', 'weathersit', 'mnth', 'hr', 'weekday']
@@ -70,7 +70,7 @@ data.head()
 # 
 # 我们会保存换算因子，以便当我们使用网络进行预测时可以还原数据。
 
-# In[150]:
+# In[6]:
 
 
 quant_features = ['casual', 'registered', 'cnt', 'temp', 'hum', 'windspeed']
@@ -82,7 +82,7 @@ for each in quant_features:
     data.loc[:, each] = (data[each] - mean)/std
 
 
-# In[151]:
+# In[7]:
 
 
 data.head()
@@ -92,7 +92,7 @@ data.head()
 # 
 # 我们将大约最后 21 天的数据保存为测试数据集，这些数据集会在训练完网络后使用。我们将使用该数据集进行预测，并与实际的骑行人数进行对比。
 
-# In[152]:
+# In[8]:
 
 
 # Save data for approximately the last 21 days 
@@ -109,7 +109,7 @@ test_features, test_targets = test_data.drop(target_fields, axis=1), test_data[t
 
 # 我们将数据拆分为两个数据集，一个用作训练，一个在网络训练完后用来验证网络。因为数据是有时间序列特性的，所以我们用历史数据进行训练，然后尝试预测未来数据（验证数据集）。
 
-# In[153]:
+# In[9]:
 
 
 # Hold out the last 60 days or so of the remaining data as a validation set
@@ -139,7 +139,13 @@ val_features, val_targets = features[-60*24:], targets[-60*24:]
 # 
 #   
 
-# In[305]:
+# In[19]:
+
+
+features.shape
+
+
+# In[13]:
 
 
 import torch
@@ -221,25 +227,38 @@ class NeuralNetwork(object):
 
             # TODO: Output error - Replace this value with your calculations.
             # Output layer error is the difference between desired target and actual output.
+            # target减去神经网络的output（计算神经网络计算出来的输出与实际值target的差值)
             error = y - final_outputs
             
-            # TODO: Calculate the hidden layer's contribution to the error
-            hidden_error = error * final_outputs * (1 - final_outputs) * self.weights_hidden_to_output
-            
             # TODO: Backpropagated error terms - Replace these values with your calculations.
-            # output_error_term = hidden_outputs.T * error * sigmoid_prime(final_inputs)
-            output_error_term = error * final_outputs * (1 - final_outputs)
-            hidden_error_term = hidden_error.T * hidden_outputs * (1 - hidden_outputs)  # sigmoid_prime(hidden_inputs)
+            # 正常是：error * final_output的导数、 error * sigmoid_prime(final_inputs), 本例子是f(x) =x 输出层导数为1,即error *  1
+            # 
+            output_error_term = error * 1
             
+            # TODO: Calculate the hidden layer's contribution to the error
+            # 计算隐藏层贡献了多少误差： output_error * weights_hidden_to_output
+            hidden_error = np.dot(self.weights_hidden_to_output , output_error_term)
+            
+            
+            # 隐藏层的error乘以 隐藏层输出的导数 hidden_outputs * (1 - hidden_outputs) 或者 sigmoid_prime(hidden_inputs)
+            hidden_error_term = hidden_error * hidden_outputs * (1 - hidden_outputs)  # sigmoid_prime(hidden_inputs)
+            
+            # 每一层的error term计算之后，配合学习速率，就得出weight step的计算
             # Weight step (input to hidden)
-            delta_weights_i_h += self.lr * hidden_error_term * X[:, None]
+            delta_weights_i_h += hidden_error_term  * X[:, None]
             
             # Weight step (hidden to output)
-            delta_weights_h_o += self.lr * output_error_term * hidden_outputs[:, None]
+            delta_weights_h_o += output_error_term  * hidden_outputs[:, None]
             
         # TODO: Update the weights - Replace these values with your calculations.
-        self.weights_hidden_to_output += delta_weights_h_o # update hidden-to-output weights with gradient descent step
-        self.weights_input_to_hidden += delta_weights_i_h # update input-to-hidden weights with gradient descent step
+        # 神经网络训练时并不是把传入的features和targets一次性进行计算，而是放入迭代里，每次只取一个record，比如传入的features维度为（128，56），
+        # 一次只取128行中的一行数据进行计算，同时每个迭代里，权重步长是以累加的形式计算的，
+        # 所以出for循环之后需要对累加的权重步长除以迭代次数n_records，以平均值的计算方式来更新每次计算的权重。
+        
+        # # update hidden-to-output weights with gradient descent step
+        self.weights_hidden_to_output += self.lr * delta_weights_h_o / n_records 
+        # update input-to-hidden weights with gradient descent step
+        self.weights_input_to_hidden += self.lr * delta_weights_i_h / n_records 
  
     def run(self, features):
         ''' Run a forward pass through the network with input features 
@@ -261,7 +280,7 @@ class NeuralNetwork(object):
         return final_outputs
 
 
-# In[306]:
+# In[14]:
 
 
 def MSE(y, Y):
@@ -272,7 +291,7 @@ def MSE(y, Y):
 # 
 # 运行这些单元测试，检查你的网络实现是否正确。这样可以帮助你确保网络已正确实现，然后再开始训练网络。这些测试必须成功才能通过此项目。
 
-# In[307]:
+# In[15]:
 
 
 import numpy as np
@@ -359,21 +378,21 @@ unittest.TextTestRunner().run(suite)
 # 
 # 隐藏节点越多，模型的预测结果就越准确。尝试不同的隐藏节点的数量，看看对性能有何影响。你可以查看损失字典，寻找网络性能指标。如果隐藏单元的数量太少，那么模型就没有足够的空间进行学习，如果太多，则学习方向就有太多的选择。选择隐藏单元数量的技巧在于找到合适的平衡点。
 
-# In[288]:
+# In[16]:
 
 
 features.shape
 
 
-# In[309]:
+# In[38]:
 
 
 import sys
 
 ### Set the hyperparameters here ###
-iterations = 20  # 100
-learning_rate = 0.1
-hidden_nodes = 2
+iterations = 3500  # 100
+learning_rate = 0.5
+hidden_nodes = 20
 output_nodes = 1
 
 N_i = train_features.shape[1]
@@ -397,20 +416,27 @@ for ii in range(iterations):
     losses['validation'].append(val_loss)
 
 
-# In[310]:
+# In[39]:
 
 
+plt.figure(figsize=(20,12))
 plt.plot(losses['train'], label='Training loss')
 plt.plot(losses['validation'], label='Validation loss')
+plt.ylim((0.01, 5))
 plt.legend()
 _ = plt.ylim()
 
+
+# #### 可以看到，当hiddent layer调整层20次后，大概在3000次迭代后，训练误差、验证误差达到最低点，所以我们修改迭代次数为3000
+# * Progress: 100.0% ... Training loss: 0.056 ... Validation loss: 0.188 ... Iterations times: 9999
+# #### 迭代次数3500，hidden layer 20 时结果
+# * Progress: 100.0% ... Training loss: 0.077 ... Validation loss: 0.146 ... Iterations times: 3499
 
 # ## 检查预测结果
 # 
 # 使用测试数据看看网络对数据建模的效果如何。如果完全错了，请确保网络中的每步都正确实现。
 
-# In[311]:
+# In[40]:
 
 
 fig, ax = plt.subplots(figsize=(8,4))
@@ -437,3 +463,13 @@ _ = ax.set_xticklabels(dates[12::24], rotation=45)
 # 
 # #### 请将你的答案填写在下方
 # 
+
+# 
+# * 学习率设置的不当，导致错过最低点
+# * 迭代次数不足，导致最小误差没有到达最低点附近
+
+# In[ ]:
+
+
+
+
